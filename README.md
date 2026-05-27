@@ -10,6 +10,9 @@ A Python library for parsing and analyzing Stellaris save files.
 - **NEW:** Track planet districts and resource deposits
 - **NEW:** Analyze district capacity and expansion opportunities
 - **NEW:** Identify special planet features (Gaia worlds, strategic resources)
+- **NEW:** Parse hyperlane network and system connections
+- **NEW:** Analyze territory layout, chokepoints, and border systems
+- **NEW:** Calculate distances between systems
 - Identify optimization opportunities for resource production
 - Support for both regular and gestalt consciousness empires
 
@@ -62,6 +65,7 @@ See the `examples/` directory for more detailed usage:
 
 - `basic_analysis.py` - Basic save file analysis and governor assignments
 - **`planet_resources.py`** - Analyze districts, deposits, and expansion opportunities
+- **`hyperlane_network.py`** - Analyze hyperlane connections, chokepoints, and strategic systems
 
 ## Documentation
 
@@ -149,6 +153,53 @@ The library now tracks detailed planet infrastructure:
 
 - `planet.has_special_deposits` - True if planet has unique/strategic resources
 - `planet.planet_class` - Planet type (e.g., `pc_tropical`, `pc_gaia`, `pc_desert`)
+
+## Hyperlane Network and Territory Analysis
+
+The library can parse the complete galactic map and analyze your empire's territory:
+
+### Star System Properties
+
+- `system.name` - System name
+- `system.coordinates` - (x, y) galactic coordinates
+- `system.star_class` - Star type (e.g., "sc_k", "sc_m", "sc_g")
+- `system.planet_ids` - List of planet IDs in the system
+- `system.hyperlanes` - List of HyperlaneConnection objects
+- `system.owner_id` - Controlling country ID (if any)
+- `system.connection_count` - Number of hyperlane connections
+- `system.is_chokepoint` - True if only 1-2 connections (strategic bottleneck)
+- `system.is_hub` - True if 5+ connections (major junction)
+
+### Hyperlane Connections
+
+- `hyperlane.to_system_id` - Connected system ID
+- `hyperlane.length` - Travel distance along hyperlane
+
+### Galactic Map Analysis
+
+```python
+# Load galactic map (optionally filtered to player territory)
+galactic_map = save.get_galactic_map(filter_country_id='0')
+
+# Get territory statistics
+stats = galactic_map.calculate_territory_stats('0')
+print(f"Systems: {stats['total_systems']}")
+print(f"Border systems: {stats['border_systems']}")
+print(f"Chokepoints: {stats['chokepoints']}")
+print(f"Hubs: {stats['hubs']}")
+
+# Find strategic systems
+chokepoints = galactic_map.find_chokepoints('0')
+borders = galactic_map.find_border_systems('0')
+
+# Analyze connections
+for system in galactic_map.systems:
+    connected = galactic_map.get_connected_systems(system)
+    print(f"{system.name} connects to {len(connected)} systems")
+    
+# Calculate distances
+distance = system1.distance_to(system2)
+```
 
 ## Supported Trait Analysis
 

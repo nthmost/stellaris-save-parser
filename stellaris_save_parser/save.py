@@ -14,6 +14,7 @@ from .parser import (
     extract_leader_name
 )
 from .models import Empire, Planet, Leader
+from .system import StarSystem, HyperlaneConnection, GalacticMap
 
 
 class StellarisSave:
@@ -276,3 +277,106 @@ class StellarisSave:
                 types.append(deposit_types[dep_id])
         
         return types
+    
+    def get_galactic_map(self, filter_country_id: Optional[str] = None) -> GalacticMap:
+        """
+        Load the galactic map with all star systems and hyperlanes.
+        
+        Args:
+            filter_country_id: If provided, only load systems controlled by this country.
+                              Uses cached planet data for efficiency.
+            
+        Returns:
+            GalacticMap object with all systems
+        """
+        systems = []
+        
+        # Find galactic_object section
+        galactic_section = find_section(self.gamestate, 'galactic_object')
+        if not galactic_section:
+            return GalacticMap(systems=[])
+        
+        # If filtering, pre-load player planet IDs for efficiency
+        player_planet_ids = set()
+        if filter_country_id is not None:
+            # Use already-loaded empire data if available
+            country_id = filter_country_id
+            if country_id in self._empires:
+                player_planet_ids = {p.id for p in self._empires[country_id].planets}
+            else:
+                # Quick scan for player planets
+                planets_section = find_section(self.gamestate, 'planets')
+                if planets_section:
+                    # Just do a quick regex scan instead of full extraction
+                    owner_pattern = rf'\n\t\t\towner={filter_country_id}\s'
+                    planet_matches = re.finditer(r'\n\t\t(\d+)=\s*\{[^}]*?' + owner_pattern, planets_section, re.DOTALL)
+                    for match in planet_matches:
+                        player_planet_ids.add(match.group(1))
+        
+        # Extract all galactic objects
+        object_blocks = extract_blocks(galactic_section, indent_level=1)
+        
+        for obj_id, block in object_blocks.items():
+            # Only process star systems (skip planets, asteroids, etc.)
+            if 'type=star' not in block:
+                continue
+            
+            # Get planet IDs early for filtering
+            planet_ids = re.findall(r'planet=(\d+)', block)
+            
+            # Filter by country if requested
+            if filter_country_id is not None:
+                # Check if any planet in this system belongs to the player
+                has_player_planet = any(pid in player_planet_ids for pid in planet_ids)
+                if not has_player_planet:
+                    continue
+            
+            # Get system name
+            name_match = re.search(r'name=\s*\{\s*key="([^"]+)"', block)
+            name = name_match.group(1) if name_match else f'System_{obj_id}'
+            
+            # Get coordinates
+            coord_match = re.search(r'coordinate=\s*\{\s*x=([-\d.]+)\s*y=([-\d.]+)', block)
+            if not coord_match:
+                continue
+            coordinates = (float(coord_match.group(1)), float(coord_match.group(2)))
+            
+            # Get star class
+            star_class = extract_value(block, 'star_class', 'unknown')
+            
+            # Get owner (may not be set for unclaimed systems)
+            owner_id = extract_value(block, 'owner')
+            owner_str = str(owner_id) if owner_id is not None else None
+            
+            # If filtering and we found player planets, set owner to filter_country_id
+            if filter_country_id is not None and any(pid in player_planet_ids for pid in planet_ids):
+                owner_str = filter_country_id
+            
+            # Parse hyperlanes
+            hyperlanes = []
+            hyperlane_section = re.search(r'hyperlane=\s*\{(.*?)\n\t\t\}', block, re.DOTALL)
+            if hyperlane_section:
+                # Find all connection blocks
+                to_values = re.findall(r'to=(\d+)', hyperlane_section.group(1))
+                length_values = re.findall(r'length=([\d.]+)', hyperlane_section.group(1))
+                
+                for to_id, length in zip(to_values, length_values):
+                    hyperlanes.append(HyperlaneConnection(
+                        to_system_id=to_id,
+                        length=float(length)
+                    ))
+            
+            # Create system object
+            system = StarSystem(
+                id=obj_id,
+                name=name,
+                coordinates=coordinates,
+                star_class=star_class,
+                planet_ids=planet_ids,
+                hyperlanes=hyperlanes,
+                owner_id=owner_str
+            )
+            
+            systems.append(system)
+        
+        return GalacticMap(systems=systems)
