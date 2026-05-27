@@ -121,6 +121,12 @@ class StellarisSave:
         # Extract all planet blocks
         planet_blocks = extract_blocks(planet_data, indent_level=2)
         
+        # Load district database for mapping IDs to types
+        district_types = self._load_district_types()
+        
+        # Load deposit database for mapping IDs to types
+        deposit_types = self._load_deposit_types()
+        
         for planet_id, block in planet_blocks.items():
             # Check if owned by this country
             owner = extract_value(block, 'owner')
@@ -136,6 +142,12 @@ class StellarisSave:
             name_match = re.search(r'key="([^"]+)"', block)
             name = name_match.group(1) if name_match else f'Planet_{planet_id}'
             
+            # Parse districts
+            districts = self._parse_planet_districts(block, district_types)
+            
+            # Parse deposits
+            deposits = self._parse_planet_deposits(block, deposit_types)
+            
             planet = Planet(
                 id=planet_id,
                 name=name,
@@ -147,7 +159,9 @@ class StellarisSave:
                 governor_id=str(extract_value(block, 'governor')) if extract_value(block, 'governor') else None,
                 sector_id=str(extract_value(block, 'sector')) if extract_value(block, 'sector') else None,
                 stability=extract_value(block, 'stability', 0.0),
-                colonize_date=extract_value(block, 'colonize_date')
+                colonize_date=extract_value(block, 'colonize_date'),
+                districts=districts,
+                deposits=deposits
             )
             
             planets.append(planet)
@@ -193,3 +207,72 @@ class StellarisSave:
             leaders.append(leader)
         
         return leaders
+    
+    def _load_district_types(self) -> dict[str, str]:
+        """Load district ID to type mapping."""
+        districts_section = find_section(self.gamestate, 'districts')
+        if not districts_section:
+            return {}
+        
+        district_blocks = extract_blocks(districts_section, indent_level=1)
+        district_map = {}
+        
+        for dist_id, block in district_blocks.items():
+            dist_type = extract_value(block, 'type')
+            if dist_type:
+                district_map[dist_id] = dist_type
+        
+        return district_map
+    
+    def _load_deposit_types(self) -> dict[str, str]:
+        """Load deposit ID to type mapping."""
+        deposit_section = find_section(self.gamestate, 'deposit')
+        if not deposit_section:
+            return {}
+        
+        deposit_blocks = extract_blocks(deposit_section, indent_level=1)
+        deposit_map = {}
+        
+        for dep_id, block in deposit_blocks.items():
+            dep_type = extract_value(block, 'type')
+            if dep_type:
+                deposit_map[dep_id] = dep_type
+        
+        return deposit_map
+    
+    def _parse_planet_districts(self, planet_block: str, district_types: dict[str, str]) -> dict[str, int]:
+        """Parse built districts from planet block."""
+        from collections import Counter
+        
+        # Find districts= { ... }
+        districts_match = re.search(r'districts=\s*\{\s*([0-9\s]+)\}', planet_block)
+        if not districts_match:
+            return {}
+        
+        district_ids = districts_match.group(1).split()
+        
+        # Map IDs to types
+        types = []
+        for dist_id in district_ids:
+            if dist_id in district_types:
+                types.append(district_types[dist_id])
+        
+        # Count by type
+        return dict(Counter(types))
+    
+    def _parse_planet_deposits(self, planet_block: str, deposit_types: dict[str, str]) -> list[str]:
+        """Parse deposits from planet block."""
+        # Find deposits= { ... }
+        deposits_match = re.search(r'deposits=\s*\{\s*([0-9\s]+)\}', planet_block)
+        if not deposits_match:
+            return []
+        
+        deposit_ids = deposits_match.group(1).split()
+        
+        # Map IDs to types
+        types = []
+        for dep_id in deposit_ids:
+            if dep_id in deposit_types:
+                types.append(deposit_types[dep_id])
+        
+        return types

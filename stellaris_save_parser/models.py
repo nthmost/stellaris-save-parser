@@ -3,7 +3,7 @@ Data models for Stellaris game objects.
 """
 
 from dataclasses import dataclass, field
-from typing import Optional, List
+from typing import Optional, List, Dict
 from collections import Counter
 
 
@@ -47,6 +47,8 @@ class Planet:
     sector_id: Optional[str] = None
     stability: float = 0.0
     colonize_date: Optional[str] = None
+    districts: Dict[str, int] = field(default_factory=dict)  # Built districts by type
+    deposits: List[str] = field(default_factory=list)  # Deposit types on planet
     
     def __repr__(self) -> str:
         return f"Planet(name='{self.name}', designation='{self.designation}', pops={self.pops})"
@@ -86,6 +88,91 @@ class Planet:
     def is_unspecialized(self) -> bool:
         """Check if planet lacks specialization."""
         return 'default' in self.designation.lower() or self.designation == 'none'
+    
+    @property
+    def total_districts(self) -> int:
+        """Total number of built districts."""
+        return sum(self.districts.values())
+    
+    @property
+    def available_district_slots(self) -> int:
+        """Number of district slots still available."""
+        return self.size - self.total_districts
+    
+    @property
+    def district_slots_used_percent(self) -> float:
+        """Percentage of district slots in use."""
+        if self.size == 0:
+            return 0.0
+        return (self.total_districts / self.size) * 100
+    
+    def get_district_count(self, district_type: str) -> int:
+        """Get count of a specific district type."""
+        return self.districts.get(district_type, 0)
+    
+    @property
+    def city_districts(self) -> int:
+        """Number of city districts built."""
+        return self.get_district_count('district_city')
+    
+    @property
+    def mining_districts(self) -> int:
+        """Number of mining districts built."""
+        return self.get_district_count('district_mining')
+    
+    @property
+    def generator_districts(self) -> int:
+        """Number of generator districts built."""
+        return self.get_district_count('district_generator')
+    
+    @property
+    def farming_districts(self) -> int:
+        """Number of farming districts built."""
+        return self.get_district_count('district_farming')
+    
+    @property
+    def industrial_districts(self) -> int:
+        """Number of industrial districts built."""
+        return self.get_district_count('district_industrial')
+    
+    @property
+    def has_special_deposits(self) -> bool:
+        """Check if planet has any special/unique deposits."""
+        # Special deposits often contain keywords like 'unique', 'relic', 'precursor', etc.
+        special_keywords = ['unique', 'relic', 'precursor', 'archaeo', 'zro', 'dark_matter', 
+                           'living_metal', 'nanites', 'enigmatic']
+        return any(
+            any(keyword in dep.lower() for keyword in special_keywords)
+            for dep in self.deposits
+        )
+    
+    def get_deposit_summary(self) -> Dict[str, int]:
+        """Get counts of deposit types grouped by resource category."""
+        summary = {
+            'minerals': 0,
+            'energy': 0,
+            'food': 0,
+            'research': 0,
+            'strategic': 0,
+            'other': 0
+        }
+        
+        for dep in self.deposits:
+            dep_lower = dep.lower()
+            if 'mineral' in dep_lower or 'mine' in dep_lower or 'ore' in dep_lower:
+                summary['minerals'] += 1
+            elif 'energy' in dep_lower or 'generator' in dep_lower:
+                summary['energy'] += 1
+            elif any(kw in dep_lower for kw in ['farm', 'food', 'agriculture', 'fertile', 'lush', 'jungle', 'green']):
+                summary['food'] += 1
+            elif any(kw in dep_lower for kw in ['society', 'physics', 'engineering', 'research']):
+                summary['research'] += 1
+            elif any(kw in dep_lower for kw in ['gas', 'mote', 'crystal', 'zro', 'dark_matter', 'living_metal']):
+                summary['strategic'] += 1
+            else:
+                summary['other'] += 1
+        
+        return summary
 
 
 @dataclass

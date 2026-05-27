@@ -7,6 +7,9 @@ A Python library for parsing and analyzing Stellaris save files.
 - Parse Stellaris `.sav` files (Clausewitz engine format)
 - Extract empire, planet, and leader data
 - Analyze governor assignments and traits
+- **NEW:** Track planet districts and resource deposits
+- **NEW:** Analyze district capacity and expansion opportunities
+- **NEW:** Identify special planet features (Gaia worlds, strategic resources)
 - Identify optimization opportunities for resource production
 - Support for both regular and gestalt consciousness empires
 
@@ -57,9 +60,8 @@ for mismatch in analysis['mismatches']:
 
 See the `examples/` directory for more detailed usage:
 
-- `basic_analysis.py` - Basic save file analysis
-- `governor_optimization.py` - Governor assignment optimization
-- `trait_analysis.py` - Leader trait analysis
+- `basic_analysis.py` - Basic save file analysis and governor assignments
+- **`planet_resources.py`** - Analyze districts, deposits, and expansion opportunities
 
 ## Documentation
 
@@ -83,11 +85,21 @@ print(empire.leaders)
 ```
 
 #### `Planet`
-Represents a colonized planet.
+Represents a colonized planet with districts and resources.
 
 ```python
 planet = empire.planets[0]
 print(f"{planet.name}: {planet.designation}, {planet.pops} pops")
+print(f"Districts: {planet.total_districts}/{planet.size} ({planet.available_district_slots} available)")
+print(f"Built: {planet.districts}")  # e.g., {'district_city': 1, 'district_mining': 2}
+print(f"Deposits: {len(planet.deposits)}")
+print(f"Deposit summary: {planet.get_deposit_summary()}")
+
+# Check district types
+print(f"Mining districts: {planet.mining_districts}")
+print(f"Generator districts: {planet.generator_districts}")
+print(f"Farming districts: {planet.farming_districts}")
+
 if planet.governor:
     print(f"Governor: {planet.governor.name}")
 ```
@@ -101,6 +113,42 @@ print(f"{leader.name} (Level {leader.level})")
 print(f"Class: {leader.leader_class}")
 print(f"Traits: {leader.traits}")
 ```
+
+## Planet Districts and Resources
+
+The library now tracks detailed planet infrastructure:
+
+### District Properties
+
+- `planet.size` - Total district slots available
+- `planet.total_districts` - Number of districts built
+- `planet.available_district_slots` - Empty slots for expansion
+- `planet.district_slots_used_percent` - Percentage capacity used
+- `planet.districts` - Dict of built districts by type (e.g., `{'district_city': 1, 'district_mining': 2}`)
+
+### District Type Properties
+
+- `planet.city_districts` - Number of city districts
+- `planet.mining_districts` - Number of mining districts
+- `planet.generator_districts` - Number of generator districts
+- `planet.farming_districts` - Number of farming districts
+- `planet.industrial_districts` - Number of industrial districts
+
+### Deposit Analysis
+
+- `planet.deposits` - List of deposit types (e.g., `['d_minerals_6', 'd_hot_springs']`)
+- `planet.get_deposit_summary()` - Returns dict with counts by category:
+  - `minerals` - Mining deposits
+  - `energy` - Generator deposits
+  - `food` - Agriculture deposits
+  - `research` - Research deposits
+  - `strategic` - Strategic resources (motes, gases, crystals)
+  - `other` - Other deposits
+
+### Special Planet Features
+
+- `planet.has_special_deposits` - True if planet has unique/strategic resources
+- `planet.planet_class` - Planet type (e.g., `pc_tropical`, `pc_gaia`, `pc_desert`)
 
 ## Supported Trait Analysis
 
