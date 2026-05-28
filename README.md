@@ -13,6 +13,9 @@ A Python library for parsing and analyzing Stellaris save files.
 - **NEW:** Parse hyperlane network and system connections
 - **NEW:** Analyze territory layout, chokepoints, and border systems
 - **NEW:** Calculate distances between systems
+- **NEW:** Parse bypass network (wormholes, gateways, hyper relays, L-Gates)
+- **NEW:** Track wormhole pairs and gateway networks
+- **NEW:** Identify FTL shortcuts and strategic bypass locations
 - Identify optimization opportunities for resource production
 - Support for both regular and gestalt consciousness empires
 
@@ -200,6 +203,72 @@ for system in galactic_map.systems:
 # Calculate distances
 distance = system1.distance_to(system2)
 ```
+
+## Bypass Network (Wormholes, Gateways, Hyper Relays)
+
+The library parses all FTL bypasses in the galaxy:
+
+### Bypass Types
+
+- **Wormholes** - Natural permanent connections between two systems
+- **Gateways** - Ancient or constructed gates connecting to all other gateways
+- **L-Gates** - Special gateway network to Terminal Egress
+- **Hyper Relays** - Constructed relays for faster empire-internal travel
+- **Shroud Tunnels** - Psionic bypasses through the Shroud
+
+### Basic Usage
+
+```python
+# Load bypass network
+bypass_network = save.get_bypass_network()
+
+# Count bypasses by type
+counts = bypass_network.count_by_type()
+print(f"Wormholes: {counts.get('wormhole', 0)}")
+print(f"Gateways: {counts.get('gateway', 0)}")
+
+# Get all wormholes
+wormholes = bypass_network.wormholes
+for wh in wormholes:
+    print(f"Wormhole {wh.id} in system {wh.system_id}")
+    print(f"  Active: {wh.is_active}")
+    print(f"  Links to: {wh.linked_to_id}")
+
+# Get wormhole pairs (each pair returned once)
+for wh1, wh2 in bypass_network.get_wormhole_pairs():
+    print(f"{wh1.system_id} ↔ {wh2.system_id}")
+
+# Get gateway networks
+for network in bypass_network.get_gateway_networks():
+    print(f"Gateway network with {len(network)} gates")
+    for gateway in network:
+        print(f"  Gateway {gateway.id} in system {gateway.system_id}")
+
+# Filter by status
+active_bypasses = bypass_network.get_active_bypasses()
+inactive_bypasses = bypass_network.get_inactive_bypasses()
+```
+
+### Bypass Properties
+
+- `bypass.id` - Unique bypass ID
+- `bypass.bypass_type` - BypassType enum (WORMHOLE, GATEWAY, etc.)
+- `bypass.is_active` - Whether bypass is operational
+- `bypass.system_id` - System containing this bypass
+- `bypass.planet_id` - Planet/object reference (if applicable)
+
+### Wormhole-Specific
+
+- `wormhole.linked_to_id` - ID of the connected wormhole
+
+### Gateway-Specific
+
+- `gateway.connected_gateway_ids` - List of all connected gateway IDs
+- `gateway.network_size` - Total gateways in network (including self)
+
+### Hyper Relay-Specific
+
+- `relay.connected_relay_ids` - List of connected relay IDs
 
 ## Supported Trait Analysis
 
