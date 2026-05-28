@@ -15,6 +15,10 @@ from .parser import (
 )
 from .models import Empire, Planet, Leader
 from .system import StarSystem, HyperlaneConnection, GalacticMap
+from .bypass import (
+    Bypass, BypassType, BypassNetwork,
+    Wormhole, Gateway, LGate, HyperRelay, ShroudTunnel
+)
 
 
 class StellarisSave:
@@ -380,3 +384,182 @@ class StellarisSave:
             systems.append(system)
         
         return GalacticMap(systems=systems)
+    
+    def get_bypass_network(self) -> BypassNetwork:
+        """
+        Load all bypasses (wormholes, gateways, hyper relays, etc.).
+        
+        Returns:
+            BypassNetwork object containing all bypasses
+        """
+        bypasses = []
+        
+        # Find bypasses section
+        bypass_section = find_section(self.gamestate, 'bypasses')
+        if not bypass_section:
+            return BypassNetwork(bypasses=[])
+        
+        # Extract all bypass blocks
+        bypass_blocks = extract_blocks(bypass_section, indent_level=1)
+        
+        # Build bypass-to-system map (more reliable than planet-to-system for bypasses)
+        bypass_to_system = self._get_bypass_to_system_map()
+        
+        for bypass_id, block in bypass_blocks.items():
+            # Get bypass type
+            type_str = extract_value(block, 'type')
+            if not type_str:
+                continue
+            
+            # Get common attributes
+            is_active = extract_value(block, 'active') == 'yes'
+            
+            # Get system location from bypass-to-system map
+            # (More reliable than using bypass owner field)
+            system_id = bypass_to_system.get(bypass_id)
+            
+            # Get planet ID from owner field (for reference, but not used for location)
+            planet_id = None
+            owner_match = re.search(r'owner=\s*\{[^}]*?id=(\d+)', block)
+            if owner_match:
+                planet_id = owner_match.group(1)
+            
+            # Create specific bypass type
+            bypass = None
+            
+            if type_str == 'wormhole':
+                linked_to = extract_value(block, 'linked_to')
+                bypass = Wormhole(
+                    id=bypass_id,
+                    bypass_type=BypassType.WORMHOLE,
+                    is_active=is_active,
+                    system_id=system_id,
+                    planet_id=planet_id,
+                    linked_to_id=str(linked_to) if linked_to else None
+                )
+            
+            elif type_str == 'gateway':
+                connections = self._parse_connections(block)
+                bypass = Gateway(
+                    id=bypass_id,
+                    bypass_type=BypassType.GATEWAY,
+                    is_active=is_active,
+                    system_id=system_id,
+                    planet_id=planet_id,
+                    connected_gateway_ids=connections
+                )
+            
+            elif type_str == 'lgate':
+                connections = self._parse_connections(block)
+                bypass = LGate(
+                    id=bypass_id,
+                    bypass_type=BypassType.LGATE,
+                    is_active=is_active,
+                    system_id=system_id,
+                    planet_id=planet_id,
+                    connected_lgate_ids=connections
+                )
+            
+            elif type_str == 'relay_bypass':
+                connections = self._parse_connections(block)
+                bypass = HyperRelay(
+                    id=bypass_id,
+                    bypass_type=BypassType.RELAY,
+                    is_active=is_active,
+                    system_id=system_id,
+                    planet_id=planet_id,
+                    connected_relay_ids=connections
+                )
+            
+            elif type_str == 'shroud_tunnel':
+                bypass = ShroudTunnel(
+                    id=bypass_id,
+                    bypass_type=BypassType.SHROUD_TUNNEL,
+                    is_active=is_active,
+                    system_id=system_id,
+                    planet_id=planet_id
+                )
+            
+            elif type_str == 'quantum_catapult':
+                bypass = Bypass(
+                    id=bypass_id,
+                    bypass_type=BypassType.QUANTUM_CATAPULT,
+                    is_active=is_active,
+                    system_id=system_id,
+                    planet_id=planet_id
+                )
+            
+            else:
+                # Unknown bypass type - store as generic
+                try:
+                    bypass_type_enum = BypassType(type_str)
+                except ValueError:
+                    bypass_type_enum = BypassType.UNKNOWN
+                
+                bypass = Bypass(
+                    id=bypass_id,
+                    bypass_type=bypass_type_enum,
+                    is_active=is_active,
+                    system_id=system_id,
+                    planet_id=planet_id
+                )
+            
+            if bypass:
+                bypasses.append(bypass)
+        
+        return BypassNetwork(bypasses=bypasses)
+    
+    def _get_planet_to_system_map(self) -> dict:
+        """Build a map of planet ID to system ID (cached)."""
+        planet_to_system = {}
+        
+        galactic_section = find_section(self.gamestate, 'galactic_object')
+        if not galactic_section:
+            return planet_to_system
+        
+        object_blocks = extract_blocks(galactic_section, indent_level=1)
+        
+        for sys_id, sys_block in object_blocks.items():
+            if 'type=star' not in sys_block:
+                continue
+            
+            planet_ids = re.findall(r'\bplanet=(\d+)', sys_block)
+            for pid in planet_ids:
+                planet_to_system[pid] = sys_id
+        
+        return planet_to_system
+    
+    def _get_bypass_to_system_map(self) -> dict:
+        """
+        Build a map of bypass ID to system ID.
+        
+        Systems list their bypasses in the bypasses={...} field.
+        This is the authoritative source for bypass locations.
+        """
+        bypass_to_system = {}
+        
+        galactic_section = find_section(self.gamestate, 'galactic_object')
+        if not galactic_section:
+            return bypass_to_system
+        
+        object_blocks = extract_blocks(galactic_section, indent_level=1)
+        
+        for sys_id, sys_block in object_blocks.items():
+            if 'type=star' not in sys_block:
+                continue
+            
+            # Parse bypasses field
+            bypasses_match = re.search(r'bypasses=\s*\{([^}]+)\}', sys_block)
+            if bypasses_match:
+                bypass_ids = bypasses_match.group(1).strip().split()
+                for bypass_id in bypass_ids:
+                    bypass_to_system[bypass_id] = sys_id
+        
+        return bypass_to_system
+    
+    def _parse_connections(self, bypass_block: str) -> list[str]:
+        """Parse connection IDs from a bypass block."""
+        connections_match = re.search(r'connections=\s*\{([^}]+)\}', bypass_block)
+        if connections_match:
+            return connections_match.group(1).strip().split()
+        return []
