@@ -20,6 +20,8 @@ from .bypass import (
     Wormhole, Gateway, LGate, HyperRelay, ShroudTunnel
 )
 from .economics import ResourceAmount, ResourceBalance, SystemEconomy
+from .modifiers import Modifier, parse_active_modifiers, get_modifiers_by_category
+from .budget import ResourceBudget, BudgetBreakdown, parse_budget, parse_budget_breakdown
 
 
 class StellarisSave:
@@ -719,3 +721,100 @@ class StellarisSave:
             ))
         
         return economies
+    
+    def get_player_modifiers(self) -> list[Modifier]:
+        """
+        Get all active modifiers for the player empire.
+        
+        Returns:
+            List of Modifier objects
+            
+        Example:
+            >>> save = StellarisSave("game.sav")
+            >>> modifiers = save.get_player_modifiers()
+            >>> for mod in modifiers:
+            ...     print(f"{mod.name}: {mod.description}")
+        """
+        country_id = self.get_player_country_id()
+        country_section = find_section(self.gamestate, 'country')
+        
+        if not country_section:
+            return []
+        
+        # Find player's country block
+        pattern = rf'\n\t{country_id}=\s*\{{(.*?)\n\t\d+='
+        country_match = re.search(pattern, country_section, re.DOTALL)
+        
+        if not country_match:
+            return []
+        
+        country_data = country_match.group(1)
+        return parse_active_modifiers(country_data)
+    
+    def get_player_budget(self) -> Optional[ResourceBudget]:
+        """
+        Get the complete resource budget for the player empire.
+        
+        This includes all income sources, expenses, and market trades.
+        The net income can be calculated with the formula:
+        Net = Income - Expenses + Trade Balance
+        
+        Returns:
+            ResourceBudget object or None if not found
+            
+        Example:
+            >>> save = StellarisSave("game.sav")
+            >>> budget = save.get_player_budget()
+            >>> print(f"Energy: {budget.net_energy:+.1f}")
+            >>> print(f"Minerals: {budget.net_minerals:+.1f}")
+            >>> print(f"Research: {budget.total_research:.1f}")
+        """
+        country_id = self.get_player_country_id()
+        country_section = find_section(self.gamestate, 'country')
+        
+        if not country_section:
+            return None
+        
+        # Find player's country block
+        pattern = rf'\n\t{country_id}=\s*\{{(.*?)\n\t\d+='
+        country_match = re.search(pattern, country_section, re.DOTALL)
+        
+        if not country_match:
+            return None
+        
+        country_data = country_match.group(1)
+        return parse_budget(country_data)
+    
+    def get_player_budget_breakdown(self) -> Optional[BudgetBreakdown]:
+        """
+        Get detailed budget breakdown by category for the player.
+        
+        This shows exactly where resources come from and where they're spent.
+        
+        Returns:
+            BudgetBreakdown object or None if not found
+            
+        Example:
+            >>> save = StellarisSave("game.sav")
+            >>> breakdown = save.get_player_budget_breakdown()
+            >>> 
+            >>> # See where minerals come from
+            >>> mineral_sources = breakdown.get_income_for_resource('minerals')
+            >>> for source, amount in mineral_sources.items():
+            ...     print(f"{source}: {amount:+.1f}")
+        """
+        country_id = self.get_player_country_id()
+        country_section = find_section(self.gamestate, 'country')
+        
+        if not country_section:
+            return None
+        
+        # Find player's country block
+        pattern = rf'\n\t{country_id}=\s*\{{(.*?)\n\t\d+='
+        country_match = re.search(pattern, country_section, re.DOTALL)
+        
+        if not country_match:
+            return None
+        
+        country_data = country_match.group(1)
+        return parse_budget_breakdown(country_data)

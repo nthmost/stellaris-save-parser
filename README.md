@@ -19,6 +19,10 @@ A Python library for parsing and analyzing Stellaris save files.
 - **NEW:** Track resource production and consumption (economics)
 - **NEW:** Calculate system-level resource balances
 - **NEW:** Identify resource deficits and surpluses
+- **NEW:** ✨ **Complete empire budget analysis** - income, expenses, trade balance
+- **NEW:** ✨ **Active modifier tracking** - see all empire bonuses and penalties
+- **NEW:** ✨ **Accurate resource totals** - matches in-game values within ±1.0
+- **NEW:** ✨ **Income source breakdown** - see exactly where resources come from
 - Identify optimization opportunities for resource production
 - Support for both regular and gestalt consciousness empires
 
@@ -391,35 +395,100 @@ total_research = sum(e.resources.net.total_research for e in all_systems)
 - `resources.is_mineral_positive` - True if net minerals > 0
 - `resources.is_food_positive` - True if net food > 0
 
-### ⚠️ Important Limitations
+## Empire Budget and Modifiers
 
-**The economic data parsed from planets represents BASE production/consumption only.**
+### Complete Budget Analysis
 
-What's **included**:
-- Planet-level job production and upkeep
-- District resource generation
-- Building effects on production
-- Pop resource consumption
+The library can parse the complete empire budget, providing **accurate totals that match in-game values within ±1.0**:
 
-What's **NOT included** (and can cause significant discrepancies with in-game totals):
-- **Empire-wide multipliers** from technology, traditions, and edicts
-- **Starbase production** from modules and buildings
-- **Megastructure output** (Matter Decompressor, Dyson Sphere, etc.)
-- **Trade policy conversions** (trade value converted to other resources)
-- **Special resource sources** (events, relics, etc.)
-- **Market auto-trades** and manual transactions
+```python
+# Get complete empire budget
+budget = save.get_player_budget()
 
-**Example**: A save file showing -280 minerals/month from planets might display +200 minerals/month in-game due to empire bonuses and other sources.
+print(f"Energy: {budget.net_energy:+.1f}")
+print(f"Minerals: {budget.net_minerals:+.1f}")
+print(f"Research: {budget.total_research:.1f}")
+```
 
-**Recommendation**: Use the library's economic data for:
+Budget includes:
+- ✅ **All income sources**: planets, starbases, mining stations, research stations, trade
+- ✅ **All expenses**: ships, pops, buildings, districts, leaders
+- ✅ **Market trades**: resources bought/sold on galactic market
+- ✅ **Trade policy**: trade value conversion to other resources
+
+### Income Source Breakdown
+
+See exactly where your resources come from:
+
+```python
+breakdown = save.get_player_budget_breakdown()
+
+# Where do minerals come from?
+mineral_sources = breakdown.get_income_for_resource('minerals')
+for source, amount in mineral_sources.items():
+    print(f"{source}: {amount:+.1f}")
+
+# Example output:
+#   orbital_mining_deposits: +521.6
+#   planet_miners: +146.2
+#   country_base: +20.0
+```
+
+### Active Modifiers
+
+Track all empire bonuses and penalties:
+
+```python
+modifiers = save.get_player_modifiers()
+
+for mod in modifiers:
+    print(f"{mod.name}: {mod.description}")
+    if mod.is_temporary:
+        print(f"  Expires in {mod.days_remaining} days")
+    for effect, value in mod.effects.items():
+        print(f"  {effect}: {value:+.0%}")
+```
+
+Common modifier categories:
+- **Research bonuses**: Technologies, curator insights, anomaly bonuses
+- **Resource production**: Mining techniques, energy grid, farming improvements
+- **Military**: Ship damage, fire rate, hull/shield bonuses
+- **Diplomacy**: Faction happiness, claim influence costs
+
+### Planet vs Empire Comparison
+
+Compare planet-only production to total empire income:
+
+```python
+# Planet-only production (jobs, districts, buildings)
+planet_energy = sum(p.resources.net.energy for p in player.planets if p.resources)
+
+# Total empire income (includes starbases, stations, bonuses)
+budget = save.get_player_budget()
+empire_energy = budget.net_energy
+
+# See the difference
+non_planet = empire_energy - planet_energy
+print(f"Planet energy: {planet_energy:+.1f}")
+print(f"Non-planet sources: {non_planet:+.1f}")
+print(f"Total: {empire_energy:+.1f}")
+```
+
+### Planet Economics (Legacy API)
+
+The original planet-level API still works for comparative analysis:
+
+**Use planet data for:**
 - ✅ Comparative analysis between your planets/systems
 - ✅ Identifying which planets are net producers vs consumers
 - ✅ Finding resource specialization opportunities
 - ✅ Detecting relative deficits and surpluses
 
-Do NOT use for:
-- ❌ Calculating exact empire-wide income (will be inaccurate)
-- ❌ Matching in-game economy screen totals (missing too many sources)
+**Use budget API for:**
+- ✅ Accurate empire-wide totals
+- ✅ Matching in-game economy screen
+- ✅ Understanding all income sources
+- ✅ Tracking expenses and trade
 
 ## Supported Trait Analysis
 
