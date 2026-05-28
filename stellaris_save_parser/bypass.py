@@ -251,3 +251,92 @@ class BypassNetwork:
     def get_inactive_bypasses(self) -> List[Bypass]:
         """Get all inactive bypasses."""
         return [b for b in self.bypasses if not b.is_active]
+    
+    def get_bypasses_in_systems(self, system_ids: List[str]) -> List[Bypass]:
+        """
+        Get all bypasses in a list of systems.
+        
+        Useful for filtering to a specific territory.
+        
+        Args:
+            system_ids: List of system IDs to filter by
+            
+        Returns:
+            List of bypasses in those systems
+        """
+        system_id_set = set(system_ids)
+        return [b for b in self.bypasses if b.system_id in system_id_set]
+    
+    def get_bypasses_by_owner(self, owner_id: str, system_owner_map: dict) -> List[Bypass]:
+        """
+        Get all bypasses in systems owned by a specific country.
+        
+        Args:
+            owner_id: Country ID to filter by
+            system_owner_map: Dict mapping system_id -> owner_id
+            
+        Returns:
+            List of bypasses in systems owned by this country
+            
+        Example:
+            # Build system ownership map from GalacticMap
+            system_owner_map = {s.id: s.owner_id for s in galactic_map.systems if s.owner_id}
+            
+            # Get player's bypasses
+            player_bypasses = bypass_network.get_bypasses_by_owner('0', system_owner_map)
+        """
+        owned_systems = [sys_id for sys_id, owner in system_owner_map.items() if owner == owner_id]
+        return self.get_bypasses_in_systems(owned_systems)
+    
+    def filter_by_galactic_map(self, galactic_map, owner_id: Optional[str] = None) -> 'BypassNetwork':
+        """
+        Create a new BypassNetwork filtered by galactic map criteria.
+        
+        Args:
+            galactic_map: GalacticMap instance to cross-reference
+            owner_id: If provided, only include bypasses in systems owned by this country
+            
+        Returns:
+            New BypassNetwork with filtered bypasses
+            
+        Example:
+            # Get only player's bypasses
+            player_bypasses = bypass_network.filter_by_galactic_map(galactic_map, owner_id='0')
+            
+            # Get all bypasses in mapped systems (no owner filter)
+            mapped_bypasses = bypass_network.filter_by_galactic_map(galactic_map)
+        """
+        if owner_id is not None:
+            # Filter to specific owner
+            owned_systems = galactic_map.get_systems_by_owner(owner_id)
+            system_ids = [s.id for s in owned_systems]
+        else:
+            # Include all systems in galactic map
+            system_ids = [s.id for s in galactic_map.systems]
+        
+        filtered_bypasses = self.get_bypasses_in_systems(system_ids)
+        return BypassNetwork(bypasses=filtered_bypasses)
+    
+    def count_by_owner(self, system_owner_map: dict) -> dict:
+        """
+        Count bypasses by system owner.
+        
+        Args:
+            system_owner_map: Dict mapping system_id -> owner_id
+            
+        Returns:
+            Dict mapping owner_id -> count of bypasses in their systems
+            
+        Example:
+            system_owner_map = {s.id: s.owner_id for s in galactic_map.systems if s.owner_id}
+            owner_counts = bypass_network.count_by_owner(system_owner_map)
+            print(f"Your bypasses: {owner_counts.get('0', 0)}")
+        """
+        counts = {}
+        
+        for bypass in self.bypasses:
+            if bypass.system_id and bypass.system_id in system_owner_map:
+                owner = system_owner_map[bypass.system_id]
+                counts[owner] = counts.get(owner, 0) + 1
+        
+        return counts

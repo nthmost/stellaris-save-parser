@@ -188,3 +188,19 @@ class GalacticMap:
             'hubs': len(hubs),
             'avg_connections': avg_connections
         }
+    
+    def get_system_owner_map(self) -> dict:
+        """
+        Build a map of system ID to owner ID.
+        
+        Useful for cross-referencing with bypass networks or other features.
+        Only includes systems that have an owner.
+        
+        Returns:
+            Dict mapping system_id -> owner_id
+            
+        Example:
+            system_owner_map = galactic_map.get_system_owner_map()
+            bypass_counts = bypass_network.count_by_owner(system_owner_map)
+        """
+        return {s.id: s.owner_id for s in self.systems if s.owner_id is not None}
