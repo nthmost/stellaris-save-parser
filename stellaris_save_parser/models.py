@@ -5,6 +5,7 @@ Data models for Stellaris game objects.
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict
 from collections import Counter
+from .economics import ResourceBalance
 
 
 @dataclass
@@ -49,6 +50,7 @@ class Planet:
     colonize_date: Optional[str] = None
     districts: Dict[str, int] = field(default_factory=dict)  # Built districts by type
     deposits: List[str] = field(default_factory=list)  # Deposit types on planet
+    resources: Optional[ResourceBalance] = None  # Production and consumption
     
     def __repr__(self) -> str:
         return f"Planet(name='{self.name}', designation='{self.designation}', pops={self.pops})"

@@ -19,6 +19,7 @@ from .bypass import (
     Bypass, BypassType, BypassNetwork,
     Wormhole, Gateway, LGate, HyperRelay, ShroudTunnel
 )
+from .economics import ResourceAmount, ResourceBalance, SystemEconomy
 
 
 class StellarisSave:
@@ -153,6 +154,9 @@ class StellarisSave:
             # Parse deposits
             deposits = self._parse_planet_deposits(block, deposit_types)
             
+            # Parse resources (production and consumption)
+            resources = self._parse_planet_resources(block)
+            
             planet = Planet(
                 id=planet_id,
                 name=name,
@@ -166,7 +170,8 @@ class StellarisSave:
                 stability=extract_value(block, 'stability', 0.0),
                 colonize_date=extract_value(block, 'colonize_date'),
                 districts=districts,
-                deposits=deposits
+                deposits=deposits,
+                resources=resources
             )
             
             planets.append(planet)
@@ -281,6 +286,34 @@ class StellarisSave:
                 types.append(deposit_types[dep_id])
         
         return types
+    
+    def _parse_planet_resources(self, planet_block: str) -> Optional[ResourceBalance]:
+        """Parse resource production and consumption from planet block."""
+        # Parse produces section
+        produces_match = re.search(r'produces=\s*\{([^}]+)\}', planet_block)
+        produces = ResourceAmount()
+        if produces_match:
+            resource_data = produces_match.group(1)
+            resources = re.findall(r'([a-z_]+)=([-0-9.]+)', resource_data)
+            for res_type, amount in resources:
+                if hasattr(produces, res_type):
+                    setattr(produces, res_type, float(amount))
+        
+        # Parse upkeep section
+        upkeep_match = re.search(r'upkeep=\s*\{([^}]+)\}', planet_block)
+        upkeep = ResourceAmount()
+        if upkeep_match:
+            resource_data = upkeep_match.group(1)
+            resources = re.findall(r'([a-z_]+)=([-0-9.]+)', resource_data)
+            for res_type, amount in resources:
+                if hasattr(upkeep, res_type):
+                    setattr(upkeep, res_type, float(amount))
+        
+        # Only return ResourceBalance if we found any data
+        if produces_match or upkeep_match:
+            return ResourceBalance(produces=produces, upkeep=upkeep)
+        
+        return None
     
     def get_galactic_map(self, filter_country_id: Optional[str] = None) -> GalacticMap:
         """
@@ -563,3 +596,126 @@ class StellarisSave:
         if connections_match:
             return connections_match.group(1).strip().split()
         return []
+    
+    def get_system_economy(self, system_id: str, empire: Optional[Empire] = None) -> Optional[SystemEconomy]:
+        """
+        Get aggregated economic data for a star system.
+        
+        Args:
+            system_id: The system ID to analyze
+            empire: Optional Empire object (will use player empire if not provided)
+            
+        Returns:
+            SystemEconomy object with aggregated resource data, or None if system not found
+        """
+        # Load galactic map to get system info
+        galactic_map = self.get_galactic_map()
+        system = galactic_map.get_system(system_id)
+        
+        if not system:
+            return None
+        
+        # Get empire if not provided
+        if empire is None:
+            empire = self.get_player_empire()
+        
+        # Find planets in this system owned by this empire
+        system_planets = [p for p in empire.planets if p.id in system.planet_ids]
+        
+        if not system_planets:
+            return None
+        
+        # Aggregate resources
+        total_resources = ResourceBalance()
+        total_pops = 0
+        
+        for planet in system_planets:
+            if planet.resources:
+                total_resources = total_resources + planet.resources
+            total_pops += planet.pops
+        
+        return SystemEconomy(
+            system_id=system_id,
+            system_name=system.name,
+            planet_count=len(system_planets),
+            total_pops=total_pops,
+            resources=total_resources
+        )
+    
+    def get_system_economy_by_name(self, system_name: str, empire: Optional[Empire] = None) -> Optional[SystemEconomy]:
+        """
+        Get aggregated economic data for a star system by name.
+        
+        Args:
+            system_name: The system name to search for (case-insensitive)
+            empire: Optional Empire object (will use player empire if not provided)
+            
+        Returns:
+            SystemEconomy object with aggregated resource data, or None if system not found
+            
+        Example:
+            econ = save.get_system_economy_by_name("Sol")
+            if econ:
+                print(f"{econ.system_name}: {econ.total_pops} pops")
+                print(f"Net energy: {econ.resources.net.energy:.1f}")
+        """
+        # Load galactic map to find system
+        galactic_map = self.get_galactic_map()
+        system = galactic_map.get_system_by_name(system_name)
+        
+        if not system:
+            return None
+        
+        return self.get_system_economy(system.id, empire)
+    
+    def get_all_system_economies(self, empire: Optional[Empire] = None) -> List[SystemEconomy]:
+        """
+        Get economic data for all systems with empire planets.
+        
+        Args:
+            empire: Optional Empire object (will use player empire if not provided)
+            
+        Returns:
+            List of SystemEconomy objects for all systems with empire presence
+        """
+        if empire is None:
+            empire = self.get_player_empire()
+        
+        # Build map of system ID to planets
+        galactic_map = self.get_galactic_map()
+        system_planets = {}
+        
+        for planet in empire.planets:
+            # Find which system this planet is in
+            for system in galactic_map.systems:
+                if planet.id in system.planet_ids:
+                    if system.id not in system_planets:
+                        system_planets[system.id] = []
+                    system_planets[system.id].append(planet)
+                    break
+        
+        # Create SystemEconomy for each system
+        economies = []
+        for system_id, planets in system_planets.items():
+            system = galactic_map.get_system(system_id)
+            if not system:
+                continue
+            
+            # Aggregate resources
+            total_resources = ResourceBalance()
+            total_pops = 0
+            
+            for planet in planets:
+                if planet.resources:
+                    total_resources = total_resources + planet.resources
+                total_pops += planet.pops
+            
+            economies.append(SystemEconomy(
+                system_id=system_id,
+                system_name=system.name,
+                planet_count=len(planets),
+                total_pops=total_pops,
+                resources=total_resources
+            ))
+        
+        return economies
