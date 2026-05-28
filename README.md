@@ -391,6 +391,36 @@ total_research = sum(e.resources.net.total_research for e in all_systems)
 - `resources.is_mineral_positive` - True if net minerals > 0
 - `resources.is_food_positive` - True if net food > 0
 
+### ⚠️ Important Limitations
+
+**The economic data parsed from planets represents BASE production/consumption only.**
+
+What's **included**:
+- Planet-level job production and upkeep
+- District resource generation
+- Building effects on production
+- Pop resource consumption
+
+What's **NOT included** (and can cause significant discrepancies with in-game totals):
+- **Empire-wide multipliers** from technology, traditions, and edicts
+- **Starbase production** from modules and buildings
+- **Megastructure output** (Matter Decompressor, Dyson Sphere, etc.)
+- **Trade policy conversions** (trade value converted to other resources)
+- **Special resource sources** (events, relics, etc.)
+- **Market auto-trades** and manual transactions
+
+**Example**: A save file showing -280 minerals/month from planets might display +200 minerals/month in-game due to empire bonuses and other sources.
+
+**Recommendation**: Use the library's economic data for:
+- ✅ Comparative analysis between your planets/systems
+- ✅ Identifying which planets are net producers vs consumers
+- ✅ Finding resource specialization opportunities
+- ✅ Detecting relative deficits and surpluses
+
+Do NOT use for:
+- ❌ Calculating exact empire-wide income (will be inaccurate)
+- ❌ Matching in-game economy screen totals (missing too many sources)
+
 ## Supported Trait Analysis
 
 The library includes trait categorization for:
