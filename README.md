@@ -249,6 +249,37 @@ active_bypasses = bypass_network.get_active_bypasses()
 inactive_bypasses = bypass_network.get_inactive_bypasses()
 ```
 
+### Ownership Filtering
+
+Filter bypasses by empire/territory:
+
+```python
+# Load both networks
+galactic_map = save.get_galactic_map()
+bypass_network = save.get_bypass_network()
+
+# Method 1: Use system owner map
+system_owner_map = galactic_map.get_system_owner_map()
+
+# Get player's bypasses
+player_bypasses = bypass_network.get_bypasses_by_owner('0', system_owner_map)
+print(f"You control {len(player_bypasses)} bypasses")
+
+# Count bypasses by empire
+owner_counts = bypass_network.count_by_owner(system_owner_map)
+for owner_id, count in owner_counts.items():
+    print(f"Country {owner_id}: {count} bypasses")
+
+# Method 2: Create filtered network
+player_network = bypass_network.filter_by_galactic_map(galactic_map, owner_id='0')
+print(f"Your wormholes: {len(player_network.wormholes)}")
+print(f"Your gateways: {len(player_network.gateways)}")
+
+# Get bypasses in specific systems
+my_system_ids = ['123', '456', '789']
+local_bypasses = bypass_network.get_bypasses_in_systems(my_system_ids)
+```
+
 ### Bypass Properties
 
 - `bypass.id` - Unique bypass ID
