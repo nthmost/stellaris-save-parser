@@ -16,6 +16,9 @@ A Python library for parsing and analyzing Stellaris save files.
 - **NEW:** Parse bypass network (wormholes, gateways, hyper relays, L-Gates)
 - **NEW:** Track wormhole pairs and gateway networks
 - **NEW:** Identify FTL shortcuts and strategic bypass locations
+- **NEW:** Track resource production and consumption (economics)
+- **NEW:** Calculate system-level resource balances
+- **NEW:** Identify resource deficits and surpluses
 - Identify optimization opportunities for resource production
 - Support for both regular and gestalt consciousness empires
 
@@ -300,6 +303,93 @@ local_bypasses = bypass_network.get_bypasses_in_systems(my_system_ids)
 ### Hyper Relay-Specific
 
 - `relay.connected_relay_ids` - List of connected relay IDs
+
+## Economics and Resource Tracking
+
+The library parses planet-level resource production and consumption, and can aggregate to system or empire level:
+
+### Resource Types
+
+All per-month values as stored in save files:
+
+- **Basic**: `energy`, `minerals`, `food`
+- **Advanced**: `consumer_goods`, `alloys`
+- **Research**: `physics_research`, `society_research`, `engineering_research`
+- **Special**: `unity`, `trade`, `influence`
+- **Strategic**: `volatile_motes`, `exotic_gases`, `rare_crystals`, `living_metal`, `zro`, `dark_matter`, `nanites`
+
+### Planet Resources
+
+```python
+# Get empire with resource data
+player = save.get_player_empire()
+
+# Check planet resources
+for planet in player.planets:
+    if planet.resources:
+        # Production
+        print(f"Produces energy: {planet.resources.produces.energy}")
+        
+        # Consumption
+        print(f"Consumes energy: {planet.resources.upkeep.energy}")
+        
+        # Net (production - consumption)
+        net = planet.resources.net
+        print(f"Net energy: {net.energy:+.1f}")
+        
+        # Total research across all fields
+        print(f"Research: {net.total_research:.1f}")
+        
+        # Identify deficits
+        deficits = planet.resources.get_deficit_resources()
+        if deficits:
+            print(f"Resource deficits: {deficits}")
+```
+
+### System-Level Economics
+
+Aggregate resources for an entire star system:
+
+```python
+# Query by system name
+econ = save.get_system_economy_by_name("Sol")
+
+if econ:
+    print(f"System: {econ.system_name}")
+    print(f"Planets: {econ.planet_count}")
+    print(f"Total pops: {econ.total_pops}")
+    
+    # Net resources for the entire system
+    net = econ.resources.net
+    print(f"Energy: {net.energy:+.1f}")
+    print(f"Minerals: {net.minerals:+.1f}")
+    print(f"Food: {net.food:+.1f}")
+    
+    # Check for deficits
+    deficits = econ.resources.get_deficit_resources()
+    surpluses = econ.resources.get_surplus_resources()
+    
+# Get all systems with your planets
+all_systems = save.get_all_system_economies()
+
+# Sort by population
+all_systems.sort(key=lambda e: e.total_pops, reverse=True)
+
+# Calculate empire totals
+total_energy = sum(e.resources.net.energy for e in all_systems)
+total_research = sum(e.resources.net.total_research for e in all_systems)
+```
+
+### Resource Balance Properties
+
+- `resources.produces` - ResourceAmount for production
+- `resources.upkeep` - ResourceAmount for consumption
+- `resources.net` - Calculated net (produces - upkeep)
+- `resources.get_deficit_resources()` - Dict of negative net resources
+- `resources.get_surplus_resources()` - Dict of positive net resources
+- `resources.is_energy_positive` - True if net energy > 0
+- `resources.is_mineral_positive` - True if net minerals > 0
+- `resources.is_food_positive` - True if net food > 0
 
 ## Supported Trait Analysis
 
