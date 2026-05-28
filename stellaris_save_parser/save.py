@@ -335,22 +335,25 @@ class StellarisSave:
         if not galactic_section:
             return GalacticMap(systems=[])
         
-        # If filtering, pre-load player planet IDs for efficiency
+        # Build planet ownership map (planet_id -> owner_id)
+        # Systems don't have owner= fields; ownership is determined by planets
+        planet_owners = {}
+        planets_section = find_section(self.gamestate, 'planets')
+        if planets_section:
+            planet_data = find_subsection(planets_section, 'planet')
+            if planet_data:
+                planet_blocks = extract_blocks(planet_data, indent_level=2)
+                for planet_id, block in planet_blocks.items():
+                    owner_id = extract_value(block, 'owner')
+                    if owner_id is not None:
+                        planet_owners[planet_id] = str(owner_id)
+        
+        # If filtering, identify player planets
         player_planet_ids = set()
         if filter_country_id is not None:
-            # Use already-loaded empire data if available
-            country_id = filter_country_id
-            if country_id in self._empires:
-                player_planet_ids = {p.id for p in self._empires[country_id].planets}
-            else:
-                # Quick scan for player planets
-                planets_section = find_section(self.gamestate, 'planets')
-                if planets_section:
-                    # Just do a quick regex scan instead of full extraction
-                    owner_pattern = rf'\n\t\t\towner={filter_country_id}\s'
-                    planet_matches = re.finditer(r'\n\t\t(\d+)=\s*\{[^}]*?' + owner_pattern, planets_section, re.DOTALL)
-                    for match in planet_matches:
-                        player_planet_ids.add(match.group(1))
+            for planet_id, owner_id in planet_owners.items():
+                if owner_id == filter_country_id:
+                    player_planet_ids.add(planet_id)
         
         # Extract all galactic objects
         object_blocks = extract_blocks(galactic_section, indent_level=1)
@@ -383,13 +386,13 @@ class StellarisSave:
             # Get star class
             star_class = extract_value(block, 'star_class', 'unknown')
             
-            # Get owner (may not be set for unclaimed systems)
-            owner_id = extract_value(block, 'owner')
-            owner_str = str(owner_id) if owner_id is not None else None
-            
-            # If filtering and we found player planets, set owner to filter_country_id
-            if filter_country_id is not None and any(pid in player_planet_ids for pid in planet_ids):
-                owner_str = filter_country_id
+            # Determine system ownership from planets
+            # A system is "owned" by whoever owns a colonized planet in it
+            owner_str = None
+            for pid in planet_ids:
+                if pid in planet_owners:
+                    owner_str = planet_owners[pid]
+                    break  # Use first owned planet's owner
             
             # Parse hyperlanes
             hyperlanes = []
